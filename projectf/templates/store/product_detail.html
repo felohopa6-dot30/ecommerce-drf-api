@@ -1,0 +1,27 @@
+{% comment %} <!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>متجر المنتجات</title>
+    <style>
+        body { font-family: sans-serif; margin: 30px; background-color: #f4f4f4; }
+        .grid { display: flex; gap: 20px; flex-wrap: wrap; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 220px; }
+        .price { color: green; font-weight: bold; font-size: 1.1em; }
+    </style>
+</head>
+<body>
+    <h1>قائمة المنتجات المتاحة</h1>
+    <div class="grid">
+        {% for product in products %}
+            <div class="card">
+                <h3>{{ product.name }}</h3>
+                <p class="price">{{ product.price }} ج.م</p>
+                <p>{{ product.description }}</p>
+            </div>
+        {% empty %}
+            <p>لا توجد منتجات متاحة حالياً.</p>
+        {% endfor %}
+    </div>
+</body>
+</html> {% endcomment %}
