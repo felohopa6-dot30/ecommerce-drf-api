@@ -9,12 +9,12 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import Product, Review
 from .serializers import ProductSerializer, ReviewSerializer
-from .filters import ProductsFilter
+from .filters import ProductFilter
 
 
 @api_view(['GET'])
 def get_all_products(request):
-    filterset = ProductsFilter(request.GET, queryset=Product.objects.all().order_by('id'))
+    filterset = ProductFilter(request.GET, queryset=Product.objects.all().order_by('id'))
     count = filterset.qs.count()
     
     # Pagination
