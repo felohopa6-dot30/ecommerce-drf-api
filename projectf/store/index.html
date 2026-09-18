@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>متجري الاحترافي</title>
+  <!-- Tailwind CSS للديزاين الاحترافي السريع -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800">
+
+  <!-- الهيدر / النوفبار -->
+  <header class="bg-blue-600 text-white shadow-md p-4 mb-8">
+    <div class="container mx-auto flex justify-between items-center">
+      <h1 class="text-2xl font-bold">متجري أونلاين</h1>
+      <a href="https://felo7.pythonanywhere.com/admin/" target="_blank" class="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded text-sm transition">
+        لوحة التحكم (Admin)
+      </a>
+    </div>
+  </header>
+
+  <!-- محتوى المنتجات -->
+  <main class="container mx-auto px-4">
+    <h2 class="text-xl font-bold mb-6 text-gray-700 border-b pb-2">المنتجات المتاحة</h2>
+    
+    <!-- مؤشر التحميل -->
+    <div id="loading" class="text-center py-10 text-gray-500 font-semibold">
+      جاري تحميل المنتجات من الـ API...
+    </div>
+
+    <!-- كارتات المنتجات هتظهر هنا -->
+    <div id="products-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 hidden">
+      <!-- المنتجات بتترسم تلقائياً من الجافاسكريبت -->
+    </div>
+  </main>
+
+  <!-- كود الجافاسكريبت للربط بالـ API -->
+  <script>
+    // 1. عنوان الـ API المباشر بتاعك على PythonAnywhere
+    const API_URL = 'https://felo7.pythonanywhere.com/api/store/';
+
+    async function fetchProducts() {
+      const loadingEl = document.getElementById('loading');
+      const containerEl = document.getElementById('products-container');
+
+      try {
+        // 2. إرسال الطلب للسيرفر
+        const response = await fetch(API_URL);
+
+        if (!response.ok) {
+          throw new Error('فشل جلب البيانات من السيرفر');
+        }
+
+        // 3. تحويل الاستجابة لـ JSON
+        const data = await response.json();
+        
+        // التعامل مع صيغة الداتا سواء كانت List أو Paginated (results)
+        const products = Array.isArray(data) ? data : (data.results || []);
+
+        loadingEl.classList.add('hidden');
+        containerEl.classList.remove('hidden');
+
+        if (products.length === 0) {
+          containerEl.innerHTML = '<p class="col-span-full text-center text-gray-500">لا يوجد منتجات متاحة حالياً. ضيف منتجات من لوحة التحكم!</p>';
+          return;
+        }
+
+        // 4. رسم المنتجات جوه الصفحة
+        containerEl.innerHTML = products.map(product => `
+          <div class="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 flex flex-col justify-between">
+            <div>
+              <img src="${product.image || 'https://via.placeholder.com/300'}" alt="${product.name || 'منتج'}" class="w-full h-48 object-cover rounded mb-4">
+              <h3 class="font-bold text-lg mb-2 text-gray-800">${product.name || product.title || 'منتج بدون اسم'}</h3>
+              <p class="text-gray-600 text-sm mb-4 line-clamp-2">${product.description || 'لا يوجد وصف متاح.'}</p>
+            </div>
+            <div class="flex justify-between items-center border-t pt-3 mt-2">
+              <span class="text-blue-600 font-bold text-lg">${product.price ? product.price + ' جنيه' : 'السعر غير محدد'}</span>
+              <button onclick="orderProduct('${product.name || 'المنتج'}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded text-sm transition">
+                اطلب الآن
+              </button>
+            </div>
+          </div>
+        `).join('');
+
+      } catch (error) {
+        console.error('Error fetching products:', error);
+        loadingEl.innerText = 'حدث خطأ أثناء تحميل البيانات. اتأكد إن الـ API شغال أو مسموح بالـ CORS.';
+        loadingEl.classList.add('text-red-500');
+      }
+    }
+
+    function orderProduct(productName) {
+      alert(`تم تسجيل طلبك لـ "${productName}" بنجاح!`);
+    }
+
+    // تشغيل الدالة فور فتح الصفحة
+    fetchProducts();
+  </script>
+</body>
+</html>
