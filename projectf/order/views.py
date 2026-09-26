@@ -14,43 +14,66 @@ from .serializers import OrderSerializer
 def new_order(request):
     user = request.user
     data = request.data
+    
+    # دعم الحالتين: لو جاية باسم order_items أو items من الواجهة
     order_items = data.get('order_items', [])
+    if not order_items and 'items' in data:
+        raw_items = data.get('items', [])
+        # تحويل العناصر القادمة من الواجهة لتتوافق مع منطق الـ View
+        order_items = []
+        for item in raw_items:
+            # لو الاسم جاي، نحاول نلاقيه في قاعدة البيانات
+            product_obj = Product.objects.filter(name=item.get('product_name') or item.get('name')).first()
+            product_id = product_obj.id if product_obj else 1  # افتراضي لو مش موجود
+            
+            order_items.append({
+                'product': product_id,
+                'quantity': item.get('quantity', 1),
+                'price': item.get('price', 0)
+            })
 
     if not order_items or len(order_items) == 0:
         return Response({'error': 'No order items received'}, status=status.HTTP_400_BAD_REQUEST)
 
-    total_amount = sum(item['price'] * item['quantity'] for item in order_items)
+    total_amount = sum(float(item.get('price', 0)) * int(item.get('quantity', 1)) for item in order_items)
 
     order = Order.objects.create(
         user=user,
-        city=data.get('city'),
-        zip_code=data.get('zip_code'),
-        street=data.get('street'),
-        phone_number=data.get('phone_number'),
-        country=data.get('country'),
+        city=data.get('city', 'Cairo'),
+        zip_code=data.get('zip_code', '00000'),
+        street=data.get('street', data.get('address', 'Cyber Street')),
+        phone_number=data.get('phone_number', '0000000000'),
+        country=data.get('country', 'Egypt'),
         total_amount=total_amount
     )
 
     for i in order_items:
-        product = get_object_or_404(Product, id=i['product'])
+        product_id = i.get('product')
+        product = Product.objects.filter(id=product_id).first()
         
-        if product.stock < i['quantity']:
-            order.delete()
-            return Response(
-                {'error': f'Not enough stock for product: {product.name}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # لو المنتج مش موجود بالآي دي، ناخده بأول منتج متاح كحل احتياطي
+        if not product:
+            product = Product.objects.first()
 
-        OrderItem.objects.create(
-            product=product,
-            order=order,
-            name=product.name,
-            quantity=i['quantity'],
-            price=i['price']
-        )
-        
-        product.stock -= i['quantity']
-        product.save()
+        if product:
+            if hasattr(product, 'stock') and product.stock < int(i.get('quantity', 1)):
+                order.delete()
+                return Response(
+                    {'error': f'Not enough stock for product: {product.name}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            OrderItem.objects.create(
+                product=product,
+                order=order,
+                name=product.name,
+                quantity=int(i.get('quantity', 1)),
+                price=float(i.get('price', 0))
+            )
+            
+            if hasattr(product, 'stock'):
+                product.stock -= int(i.get('quantity', 1))
+                product.save()
 
     serializer = OrderSerializer(order, many=False)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -97,3 +120,54 @@ def delete_order(request, pk):
     order = get_object_or_404(Order, id=pk)
     order.delete()
     return Response({'detail': 'Order successfully deleted'}, status=status.HTTP_200_OK)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def new_order(request):
+    user = request.user
+    data = request.data
+
+    raw_items = data.get('order_items') or data.get('items') or []
+    if not raw_items:
+        return Response({'error': 'لا توجد منتجات في الطلب'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # تحقق من كل المنتجات والمخزون الأول، قبل ما نلمس الداتابيز
+    resolved_items = []
+    for item in raw_items:
+        product_id = item.get('product')
+        quantity = int(item.get('quantity', 1))
+        if not product_id:
+            return Response({'error': 'كل عنصر لازم يبعت product id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        product = Product.objects.filter(id=product_id).first()
+        if not product:
+            return Response({'error': f'منتج غير موجود: {product_id}'}, status=status.HTTP_404_NOT_FOUND)
+        if product.stock < quantity:
+            return Response({'error': f'الكمية المطلوبة من {product.name} غير متوفرة'}, status=status.HTTP_400_BAD_REQUEST)
+
+        resolved_items.append({'product': product, 'quantity': quantity, 'price': product.price})
+
+    payment_method = data.get('payment_method', 'cash')
+    total_amount = sum(i['price'] * i['quantity'] for i in resolved_items)
+
+    order = Order.objects.create(
+        user=user,
+        city=data.get('city', 'Cairo'),
+        zip_code=data.get('zip_code', '00000'),
+        street=data.get('street', data.get('address', 'غير محدد')),
+        phone_number=data.get('phone_number', ''),
+        country=data.get('country', 'Egypt'),
+        payment_method=payment_method,
+        vodafone_number=data.get('vodafone_number') if payment_method == 'vodafone' else None,
+        total_amount=total_amount,
+    )
+
+    for i in resolved_items:
+        OrderItem.objects.create(
+            product=i['product'], order=order, name=i['product'].name,
+            quantity=i['quantity'], price=i['price'],
+        )
+        i['product'].stock -= i['quantity']
+        i['product'].save()
+
+    serializer = OrderSerializer(order, many=False)
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
